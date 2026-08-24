@@ -2,7 +2,7 @@ import flet as ft
 
 
 def Navbar(on_nav_change) -> ft.Control:
-    """Barra de navegación adaptable para cambiar entre vistas."""
+    """Barra superior interactiva."""
     return ft.Container(
         content=ft.Row(
             controls=[
@@ -20,15 +20,29 @@ def Navbar(on_nav_change) -> ft.Control:
                 ),
                 ft.Row(
                     controls=[
-                        ft.TextButton(
-                            content=ft.Text("Inicio"),
-                            icon=ft.Icons.HOME,
-                            on_click=lambda e: on_nav_change("inicio"),
+                        ft.ElevatedButton(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.HOME, size=18, color=ft.Colors.WHITE),
+                                    ft.Text("Inicio", color=ft.Colors.WHITE),
+                                ],
+                                spacing=6,
+                                tight=True,
+                            ),
+                            bgcolor=ft.Colors.BLUE_GREY_700,
+                            on_click=lambda e: on_nav_change("inicio") if on_nav_change else None,
                         ),
-                        ft.TextButton(
-                            content=ft.Text("Agregar Película"),
-                            icon=ft.Icons.ADD_CIRCLE_OUTLINE,
-                            on_click=lambda e: on_nav_change("agregar"),
+                        ft.ElevatedButton(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.ADD_CIRCLE, size=18, color=ft.Colors.BLACK87),
+                                    ft.Text("Agregar Película", color=ft.Colors.BLACK87, weight=ft.FontWeight.BOLD),
+                                ],
+                                spacing=6,
+                                tight=True,
+                            ),
+                            bgcolor=ft.Colors.AMBER_500,
+                            on_click=lambda e: on_nav_change("agregar") if on_nav_change else None,
                         ),
                     ],
                     spacing=10,

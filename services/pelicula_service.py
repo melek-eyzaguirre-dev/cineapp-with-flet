@@ -1,3 +1,4 @@
+from decimal import Decimal
 import mysql.connector
 from mysql.connector import Error
 
@@ -6,166 +7,221 @@ DB_CONFIG = {
     "user": "root",
     "password": "",
     "database": "flet_peliculas_db",
-    "port": 3307
+    "port": 3307,
 }
 
 
 def obtener_conexion():
-    """Establece y retorna la conexión con MySQL."""
-    try:
-        conexion = mysql.connector.connect(**DB_CONFIG)
-        return conexion
-    except Error as e:
-        print(f"❌ Error al conectar con MySQL: {e}")
-        return None
+  """Establece y retorna la conexión con MySQL."""
+  try:
+    conexion = mysql.connector.connect(**DB_CONFIG)
+    return conexion
+  except Error as e:
+    print(f"❌ Error al conectar con MySQL: {e}")
+    return None
 
 
 def obtener_todos():
-    """Consulta y retorna todas las películas registradas."""
-    conexion = obtener_conexion()
-    if not conexion:
-        return []
+  """Consulta y retorna todas las películas registradas con sus nuevos campos."""
+  conexion = obtener_conexion()
+  if not conexion:
+    return []
 
-    peliculas = []
-    try:
-        cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id, titulo, director, puntuacion FROM peliculas ORDER BY id ASC")
-        peliculas = cursor.fetchall()
-    except Error as e:
-        print(f"❌ Error al consultar películas: {e}")
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
+  peliculas = []
+  try:
+    cursor = conexion.cursor(dictionary=True)
+    query = """
+            SELECT id, titulo, director, genero, anio_estreno, duracion_min, poster_url, comentario, puntuacion 
+            FROM peliculas 
+            ORDER BY id ASC
+        """
+    cursor.execute(query)
+    peliculas = cursor.fetchall()
+  except Error as e:
+    print(f"❌ Error al consultar películas: {e}")
+  finally:
+    if conexion.is_connected():
+      cursor.close()
+      conexion.close()
 
-    return peliculas
-
-
-def validar_datos_pelicula(datos: dict) -> tuple[bool, str]:  # [NUEVO]
-    """Valida la integridad de los datos antes de operar en la base de datos."""  # [NUEVO]
-    titulo = str(datos.get("titulo", "")).strip()  # [NUEVO]
-    director = str(datos.get("director", "")).strip()  # [NUEVO]
-    puntuacion_raw = datos.get("puntuacion")  # [NUEVO]
-
-    if not titulo:  # [NUEVO]
-        return False, "El título no puede estar vacío"  # [NUEVO]
-    if not director:  # [NUEVO]
-        return False, "El director no puede estar vacío"  # [NUEVO]
-
-    try:  # [NUEVO]
-        # Validar entero estricto o numérico exacto  # [NUEVO]
-        puntuacion = int(puntuacion_raw)  # [NUEVO]
-        if puntuacion < 1 or puntuacion > 10:  # [NUEVO]
-            return False, "La puntuación debe ser un número entero entre 1 y 10"  # [NUEVO]
-    except (ValueError, TypeError):  # [NUEVO]
-        return False, "La puntuación debe ser un número entero válido"  # [NUEVO]
-
-    return True, ""  # [NUEVO]
+  return peliculas
 
 
-def crear(datos: dict) -> tuple[bool, str]:  # [MODIFICADO]
-    """Inserta una nueva película en la base de datos con validaciones."""  # [MODIFICADO]
-    es_valido, error_msg = validar_datos_pelicula(datos)  # [NUEVO]
-    if not es_valido:  # [NUEVO]
-        return False, error_msg  # [NUEVO]
+def validar_datos_pelicula(datos: dict) -> tuple[bool, str]:
+  """Valida los campos requeridos y tipos de datos."""
+  titulo = str(datos.get("titulo", "")).strip()
+  director = str(datos.get("director", "")).strip()
+  genero = str(datos.get("genero", "")).strip()
+  puntuacion_raw = datos.get("puntuacion")
+  anio_raw = datos.get("anio_estreno")
+  duracion_raw = datos.get("duracion_min")
 
-    conexion = obtener_conexion()
-    if not conexion:
-        return False, "No se pudo establecer conexión con la base de datos"  # [MODIFICADO]
+  if not titulo:
+    return False, "El título no puede estar vacío"
+  if not director:
+    return False, "El director no puede estar vacío"
+  if not genero:
+    return False, "Debes seleccionar un género"
 
-    try:
-        cursor = conexion.cursor()
-        query = "INSERT INTO peliculas (titulo, director, puntuacion) VALUES (%s, %s, %s)"
-        valores = (datos["titulo"].strip(), datos["director"].strip(), int(datos["puntuacion"]))  # [MODIFICADO]
-        cursor.execute(query, valores)
-        conexion.commit()
-        return True, "Película registrada exitosamente"  # [MODIFICADO]
-    except Error as e:
-        print(f"❌ Error al registrar película: {e}")
-        if conexion.is_connected():
-            conexion.rollback()
-        return False, f"Error en base de datos: {e.msg}"  # [MODIFICADO]
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
+  try:
+    puntuacion = float(str(puntuacion_raw).replace(",", "."))
+    if puntuacion < 1.0 or puntuacion > 10.0:
+      return False, "La puntuación debe estar entre 1.0 y 10.0"
+  except (ValueError, TypeError):
+    return False, "Puntuación inválida (ej: 8.5)"
+
+  try:
+    anio = int(anio_raw)
+    if anio < 1888 or anio > 2030:
+      return False, "Año de estreno fuera de rango (1888 - 2030)"
+  except (ValueError, TypeError):
+    return False, "El año debe ser un número entero"
+
+  try:
+    duracion = int(duracion_raw)
+    if duracion <= 0:
+      return False, "La duración debe ser mayor a 0 minutos"
+  except (ValueError, TypeError):
+    return False, "La duración debe ser un número entero en minutos"
+
+  return True, ""
+
+
+def crear(datos: dict) -> tuple[bool, str]:
+  """Inserta una nueva película con todos los campos."""
+  es_valido, error_msg = validar_datos_pelicula(datos)
+  if not es_valido:
+    return False, error_msg
+
+  conexion = obtener_conexion()
+  if not conexion:
+    return False, "No se pudo conectar a la base de datos"
+
+  try:
+    cursor = conexion.cursor()
+    query = """
+            INSERT INTO peliculas (titulo, director, genero, anio_estreno, duracion_min, poster_url, comentario, puntuacion) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+    puntuacion_val = round(
+        float(str(datos["puntuacion"]).replace(",", ".")), 1
+    )
+    valores = (
+        datos["titulo"].strip(),
+        datos["director"].strip(),
+        datos["genero"].strip(),
+        int(datos["anio_estreno"]),
+        int(datos["duracion_min"]),
+        datos.get("poster_url", "").strip(),
+        datos.get("comentario", "").strip(),
+        puntuacion_val,
+    )
+    cursor.execute(query, valores)
+    conexion.commit()
+    return True, "Película registrada exitosamente"
+  except Error as e:
+    print(f"❌ Error al registrar película: {e}")
+    if conexion.is_connected():
+      conexion.rollback()
+    return False, f"Error en base de datos: {e.msg}"
+  finally:
+    if conexion.is_connected():
+      cursor.close()
+      conexion.close()
 
 
 def obtener_por_id(pelicula_id: int):
-    """Consulta y retorna una sola película por su ID o None si no existe."""
-    conexion = obtener_conexion()
-    if not conexion:
-        return None
+  """Consulta una película por su ID."""
+  conexion = obtener_conexion()
+  if not conexion:
+    return None
 
-    pelicula = None
-    try:
-        cursor = conexion.cursor(dictionary=True)
-        query = "SELECT id, titulo, director, puntuacion FROM peliculas WHERE id = %s"
-        cursor.execute(query, (pelicula_id,))
-        pelicula = cursor.fetchone()
-    except Error as e:
-        print(f"❌ Error al consultar película por ID: {e}")
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
-
-    return pelicula
-
-
-def actualizar(pelicula_id: int, datos: dict) -> tuple[bool, str]:  # [MODIFICADO]
-    """Actualiza los datos de una película existente con validaciones previas."""  # [MODIFICADO]
-    es_valido, error_msg = validar_datos_pelicula(datos)  # [NUEVO]
-    if not es_valido:  # [NUEVO]
-        return False, error_msg  # [NUEVO]
-
-    conexion = obtener_conexion()
-    if not conexion:
-        return False, "No se pudo establecer conexión con la base de datos"  # [MODIFICADO]
-
-    try:
-        cursor = conexion.cursor()
-        query = """
-            UPDATE peliculas 
-            SET titulo = %s, director = %s, puntuacion = %s 
+  pelicula = None
+  try:
+    cursor = conexion.cursor(dictionary=True)
+    query = """
+            SELECT id, titulo, director, genero, anio_estreno, duracion_min, poster_url, comentario, puntuacion 
+            FROM peliculas 
             WHERE id = %s
         """
-        valores = (datos["titulo"].strip(), datos["director"].strip(), int(datos["puntuacion"]),
-                   pelicula_id)  # [MODIFICADO]
-        cursor.execute(query, valores)
-        conexion.commit()
-        return True, "Película actualizada exitosamente"  # [MODIFICADO]
-    except Error as e:
-        print(f"❌ Error al actualizar película ID {pelicula_id}: {e}")
-        if conexion.is_connected():
-            conexion.rollback()
-        return False, f"Error en base de datos: {e.msg}"  # [MODIFICADO]
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
+    cursor.execute(query, (pelicula_id,))
+    pelicula = cursor.fetchone()
+  except Error as e:
+    print(f"❌ Error al consultar película por ID: {e}")
+  finally:
+    if conexion.is_connected():
+      cursor.close()
+      conexion.close()
+
+  return pelicula
+
+
+def actualizar(pelicula_id: int, datos: dict) -> tuple[bool, str]:
+  """Actualiza todos los campos de una película existente."""
+  es_valido, error_msg = validar_datos_pelicula(datos)
+  if not es_valido:
+    return False, error_msg
+
+  conexion = obtener_conexion()
+  if not conexion:
+    return False, "No se pudo conectar a la base de datos"
+
+  try:
+    cursor = conexion.cursor()
+    query = """
+            UPDATE peliculas 
+            SET titulo = %s, director = %s, genero = %s, anio_estreno = %s, 
+                duracion_min = %s, poster_url = %s, comentario = %s, puntuacion = %s 
+            WHERE id = %s
+        """
+    puntuacion_val = round(
+        float(str(datos["puntuacion"]).replace(",", ".")), 1
+    )
+    valores = (
+        datos["titulo"].strip(),
+        datos["director"].strip(),
+        datos["genero"].strip(),
+        int(datos["anio_estreno"]),
+        int(datos["duracion_min"]),
+        datos.get("poster_url", "").strip(),
+        datos.get("comentario", "").strip(),
+        puntuacion_val,
+        pelicula_id,
+    )
+    cursor.execute(query, valores)
+    conexion.commit()
+    return True, "Película actualizada exitosamente"
+  except Error as e:
+    print(f"❌ Error al actualizar película ID {pelicula_id}: {e}")
+    if conexion.is_connected():
+      conexion.rollback()
+    return False, f"Error en base de datos: {e.msg}"
+  finally:
+    if conexion.is_connected():
+      cursor.close()
+      conexion.close()
 
 
 def eliminar(pelicula_id: int) -> bool:
-    """Elimina una película por su ID."""
-    conexion = obtener_conexion()
-    if not conexion:
-        return False
+  """Elimina una película por ID."""
+  conexion = obtener_conexion()
+  if not conexion:
+    return False
 
-    exito = False
-    try:
-        cursor = conexion.cursor()
-        query = "DELETE FROM peliculas WHERE id = %s"
-        cursor.execute(query, (pelicula_id,))
-        conexion.commit()
-        exito = True
-    except Error as e:
-        print(f"❌ Error al eliminar película ID {pelicula_id}: {e}")
-        if conexion.is_connected():
-            conexion.rollback()
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
+  exito = False
+  try:
+    cursor = conexion.cursor()
+    query = "DELETE FROM peliculas WHERE id = %s"
+    cursor.execute(query, (pelicula_id,))
+    conexion.commit()
+    exito = True
+  except Error as e:
+    print(f"❌ Error al eliminar película ID {pelicula_id}: {e}")
+    if conexion.is_connected():
+      conexion.rollback()
+  finally:
+    if conexion.is_connected():
+      cursor.close()
+      conexion.close()
 
-    return exito
+  return exito
