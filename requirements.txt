@@ -1,0 +1,6 @@
+flet
+mysql-connector-python
+SQLAlchemy
+alembic
+python-dotenv
+PyMySQL
